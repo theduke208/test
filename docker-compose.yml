@@ -1,0 +1,85 @@
+version: '2'
+
+services:
+    webserver:
+        #image: stgarf/paperless:v2.7.0-convert_fix # old image
+        image: thepaperlessproject/paperless
+        restart: always
+        ports:
+            # You can adapt the port you want Paperless to listen on by
+            # modifying the part before the `:`.
+            - "8080:8000"
+        #healthcheck:
+        #    test: ["CMD", "curl" , "-f", "http://localhost:8000"]
+        #    interval: 30s
+        #    timeout: 10s
+        #    retries: 5
+        volumes:
+            - paperless_data:/usr/src/paperless/data:nocopy
+            - paperless_media:/usr/src/paperless/media:nocopy
+            - paperless_consume:/consume:nocopy
+            - paperless_export:/export:nocopy
+        #env_file: docker-compose.env
+        # The reason the line is here is so that the webserver that doesn't do
+        # any text recognition and doesn't have to install unnecessary
+        # languages the user might have set in the env-file by overwriting the
+        # value with nothing.
+        environment:
+            - PAPERLESS_OCR_LANGUAGES=deu eng
+            - USERMAP_UID=1001
+            - USERMAP_GID=1002
+        command: ["runserver", "--insecure", "--noreload", "0.0.0.0:8000"]
+
+    consumer:
+        image: thepaperlessproject/paperless
+        restart: always
+        depends_on:
+            - webserver
+                #condition: service_healthy
+        volumes:
+            - paperless_data:/usr/src/paperless/data:nocopy
+            - paperless_media:/usr/src/paperless/media:nocopy
+            # You have to adapt the local path you want the consumption
+            # directory to mount to by modifying the part before the ':'.
+            - paperless_consume:/consume:nocopy
+            # Likewise, you can add a local path to mount a directory for
+            # exporting. This is not strictly needed for paperless to
+            # function, only if you're exporting your files: uncomment
+            # it and fill in a local path if you know you're going to
+            # want to export your documents.
+            # - /path/to/another/arbitrary/place:/export
+            - paperless_export:/export:nocopy
+        #env_file: docker-compose.env
+        command: ["document_consumer"]
+        environment:
+            - PAPERLESS_OCR_LANGUAGES=deu eng
+            - USERMAP_UID=1001
+            - USERMAP_GID=1002
+            - PAPERLESS_CONVERT_MEMORY_LIMIT=32000000
+            - PAPERLESS_CONVERT_TMPDIR=/var/tmp
+        tmpfs:
+            - /tmp
+
+    rsync:
+        image: stefda/rsync
+        restart: always
+        volumes:
+            - paperless_consume:/volume
+        tmpfs:
+            - /tmp
+        #environment:
+        #    VOLUME: /var/www/app
+        #    USER: www-data
+        #    GROUP: www-data
+        ports:
+            - "873:873"
+
+volumes:
+    paperless_data:
+        external: true
+    paperless_consume:
+        external: true
+    paperless_media:
+        external: true
+    paperless_export:
+        external: true
